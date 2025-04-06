@@ -11,8 +11,9 @@ app = Flask(__name__)
 load_dotenv()
 
 # Supabase setup
-SUPABASE_URL = os.getenv("https://unbymqurftokftdnbekt.supabase.co")
-SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuYnltcXVyZnRva2Z0ZG5iZWt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5MjE3OTYsImV4cCI6MjA1OTQ5Nzc5Nn0.rdYOOJqNKn2putafHGw90WMfV9QXQEiCyYxzeFk_lvc")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def extract_text_from_pdf(file_stream):
