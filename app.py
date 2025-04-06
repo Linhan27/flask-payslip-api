@@ -40,14 +40,14 @@ def extract_payslip():
     if 'file' not in request.files or 'user_id' not in request.form:
         return jsonify({"error": "Missing file or user_id"}), 400
 
-    file = request.files['file']
-    user_id = request.form['user_id']
-    filename = file.filename
-
-    if not filename.lower().endswith('.pdf'):
-        return jsonify({"error": "Only PDF files are supported"}), 400
-
     try:
+        file = request.files['file']
+        user_id = int(request.form['user_id'])  # ✅ cast to int
+        filename = file.filename
+
+        if not filename.lower().endswith('.pdf'):
+            return jsonify({"error": "Only PDF files are supported"}), 400
+
         pdf_bytes = file.read()
         extracted_text = extract_text_from_pdf(io.BytesIO(pdf_bytes))
 
@@ -55,7 +55,7 @@ def extract_payslip():
         employment_type = extract_employment_type(extracted_text)
         result_id = str(uuid.uuid4())
 
-        # Save to Supabase
+        # Insert into Supabase
         response = supabase.table("payslip_results").insert({
             "id": result_id,
             "user_id": user_id,
@@ -63,7 +63,6 @@ def extract_payslip():
             "employment_type": employment_type
         }).execute()
 
-        # Check result
         if not response.data:
             return jsonify({"error": "Failed to insert data into Supabase"}), 500
 
@@ -73,17 +72,17 @@ def extract_payslip():
             "NetPay": net_pay,
             "EmploymentType": employment_type
         })
-    
+
+    except ValueError:
+        return jsonify({"error": "user_id must be a number"}), 400
     except Exception as e:
-        return jsonify({
-            "error": "Something went wrong",
-            "details": str(e)
-        }), 500
+        return jsonify({"error": "Something went wrong", "details": str(e)}), 500
 
 # ✅ GET /get-payslips/<user_id>
 @app.route('/get-payslips/<user_id>', methods=['GET'])
 def get_payslips_by_user(user_id):
     try:
+        user_id = int(user_id)  # ✅ cast for Supabase bigint match
         response = supabase.table("payslip_results") \
             .select("*") \
             .eq("user_id", user_id) \
@@ -95,11 +94,10 @@ def get_payslips_by_user(user_id):
 
         return jsonify(response.data)
 
+    except ValueError:
+        return jsonify({"error": "Invalid user_id. Must be a number."}), 400
     except Exception as e:
-        return jsonify({
-            "error": "Something went wrong",
-            "details": str(e)
-        }), 500
+        return jsonify({"error": "Something went wrong", "details": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
