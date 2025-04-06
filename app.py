@@ -2,8 +2,18 @@ from flask import Flask, request, jsonify
 import fitz  # PyMuPDF
 import re
 import io
+import uuid
+import os
+from dotenv import load_dotenv
+from supabase import create_client
 
 app = Flask(__name__)
+load_dotenv()
+
+# Supabase setup
+SUPABASE_URL = os.getenv("https://unbymqurftokftdnbekt.supabase.co")
+SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuYnltcXVyZnRva2Z0ZG5iZWt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5MjE3OTYsImV4cCI6MjA1OTQ5Nzc5Nn0.rdYOOJqNKn2putafHGw90WMfV9QXQEiCyYxzeFk_lvc")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def extract_text_from_pdf(file_stream):
     text = ""
@@ -24,12 +34,14 @@ def extract_employment_type(text):
     match = re.search(pattern, text)
     return match.group(1).strip() if match else None
 
+# ✅ POST /extract-payslip
 @app.route('/extract-payslip', methods=['POST'])
 def extract_payslip():
-    if 'file' not in request.files:
-        return jsonify({"error": "PDF file is missing"}), 400
+    if 'file' not in request.files or 'user_id' not in request.form:
+        return jsonify({"error": "Missing file or user_id"}), 400
 
     file = request.files['file']
+    user_id = request.form['user_id']
     filename = file.filename
 
     if not filename.lower().endswith('.pdf'):
@@ -40,11 +52,39 @@ def extract_payslip():
 
     net_pay = extract_value("Net Pay", extracted_text)
     employment_type = extract_employment_type(extracted_text)
+    result_id = str(uuid.uuid4())
+
+    # Save to Supabase
+    response = supabase.table("payslip_results").insert({
+        "id": result_id,
+        "user_id": user_id,
+        "net_pay": net_pay,
+        "employment_type": employment_type
+    }).execute()
+
+    if response.error:
+        return jsonify({"error": response.error.message}), 500
 
     return jsonify({
+        "id": result_id,
+        "user_id": user_id,
         "NetPay": net_pay,
         "EmploymentType": employment_type
     })
+
+# ✅ GET /get-payslips/<user_id>
+@app.route('/get-payslips/<user_id>', methods=['GET'])
+def get_payslips_by_user(user_id):
+    response = supabase.table("payslip_results") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    if response.error:
+        return jsonify({"error": response.error.message}), 500
+
+    return jsonify(response.data)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
