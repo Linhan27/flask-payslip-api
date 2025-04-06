@@ -48,30 +48,36 @@ def extract_payslip():
     if not filename.lower().endswith('.pdf'):
         return jsonify({"error": "Only PDF files are supported"}), 400
 
-    pdf_bytes = file.read()
-    extracted_text = extract_text_from_pdf(io.BytesIO(pdf_bytes))
+    try:
+        pdf_bytes = file.read()
+        extracted_text = extract_text_from_pdf(io.BytesIO(pdf_bytes))
 
-    net_pay = extract_value("Net Pay", extracted_text)
-    employment_type = extract_employment_type(extracted_text)
-    result_id = str(uuid.uuid4())
+        net_pay = extract_value("Net Pay", extracted_text)
+        employment_type = extract_employment_type(extracted_text)
+        result_id = str(uuid.uuid4())
 
-    # Save to Supabase
-    response = supabase.table("payslip_results").insert({
-        "id": result_id,
-        "user_id": user_id,
-        "net_pay": net_pay,
-        "employment_type": employment_type
-    }).execute()
+        response = supabase.table("payslip_results").insert({
+            "id": result_id,
+            "user_id": user_id,
+            "net_pay": net_pay,
+            "employment_type": employment_type
+        }).execute()
 
-    if response.error:
-        return jsonify({"error": response.error.message}), 500
+        if response.error:
+            print("Supabase insert error:", response.error.message)
+            return jsonify({"error": response.error.message}), 500
 
-    return jsonify({
-        "id": result_id,
-        "user_id": user_id,
-        "NetPay": net_pay,
-        "EmploymentType": employment_type
-    })
+        return jsonify({
+            "id": result_id,
+            "user_id": user_id,
+            "NetPay": net_pay,
+            "EmploymentType": employment_type
+        })
+
+    except Exception as e:
+        print("Exception occurred:", e)
+        return jsonify({"error": "Something went wrong", "details": str(e)}), 500
+
 
 # ✅ GET /get-payslips/<user_id>
 @app.route('/get-payslips/<user_id>', methods=['GET'])
