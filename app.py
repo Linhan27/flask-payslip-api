@@ -37,12 +37,17 @@ def extract_employment_type(text):
 # ✅ POST /extract-payslip
 @app.route('/extract-payslip', methods=['POST'])
 def extract_payslip():
-    if 'file' not in request.files or 'user_id' not in request.form:
-        return jsonify({"error": "Missing file or user_id"}), 400
+    if 'file' not in request.files:
+        return jsonify({"error": "Missing PDF file"}), 400
 
     try:
+        user_id_header = request.headers.get('user_id')
+        if user_id_header is None:
+            return jsonify({"error": "Missing user_id in headers"}), 400
+
+        user_id = int(user_id_header)  # cast to int
+
         file = request.files['file']
-        user_id = int(request.form['user_id'])  # ✅ cast to int
         filename = file.filename
 
         if not filename.lower().endswith('.pdf'):
@@ -82,7 +87,7 @@ def extract_payslip():
 @app.route('/get-payslips/<user_id>', methods=['GET'])
 def get_payslips_by_user(user_id):
     try:
-        user_id = int(user_id)  # ✅ cast for Supabase bigint match
+        user_id = int(user_id)  # cast for bigint match
         response = supabase.table("payslip_results") \
             .select("*") \
             .eq("user_id", user_id) \
