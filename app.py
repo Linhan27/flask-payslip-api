@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import fitz  # PyMuPDF
 import re
 import io
+import base64
 import uuid
 import os
 from dotenv import load_dotenv
@@ -34,33 +35,44 @@ def extract_employment_type(text):
     match = re.search(pattern, text)
     return match.group(1).strip() if match else None
 
-# ✅ POST /extract-payslip
 @app.route('/extract-payslip', methods=['POST'])
 def extract_payslip():
-    if 'file' not in request.files:
-        return jsonify({"error": "Missing PDF file"}), 400
+    extracted_text = None
+    user_id = None
 
     try:
-        user_id_header = request.headers.get('user_id')
-        if user_id_header is None:
-            return jsonify({"error": "Missing user_id in headers"}), 400
+        # ✅ Case 1: multipart/form-data (from OutSystems with form fields)
+        if 'file' in request.files and 'user_id' in request.form:
+            file = request.files['file']
+            user_id = int(request.form['user_id'])
 
-        user_id = int(user_id_header)  # cast to int
+            if not file.filename.lower().endswith('.pdf'):
+                return jsonify({"error": "Only PDF files are supported"}), 400
 
-        file = request.files['file']
-        filename = file.filename
+            pdf_bytes = file.read()
+            extracted_text = extract_text_from_pdf(io.BytesIO(pdf_bytes))
 
-        if not filename.lower().endswith('.pdf'):
-            return jsonify({"error": "Only PDF files are supported"}), 400
+        # ✅ Case 2: application/json with base64
+        elif request.is_json:
+            data = request.get_json()
+            user_id = int(data.get("user_id"))
+            base64_str = data.get("file")
 
-        pdf_bytes = file.read()
-        extracted_text = extract_text_from_pdf(io.BytesIO(pdf_bytes))
+            if not base64_str:
+                return jsonify({"error": "Missing base64-encoded file"}), 400
 
+            pdf_bytes = base64.b64decode(base64_str)
+            extracted_text = extract_text_from_pdf(io.BytesIO(pdf_bytes))
+
+        else:
+            return jsonify({"error": "Unsupported content type"}), 400
+
+        # ✅ Extract info
         net_pay = extract_value("Net Pay", extracted_text)
         employment_type = extract_employment_type(extracted_text)
         result_id = str(uuid.uuid4())
 
-        # Insert into Supabase
+        # ✅ Store in Supabase
         response = supabase.table("payslip_results").insert({
             "id": result_id,
             "user_id": user_id,
@@ -69,7 +81,7 @@ def extract_payslip():
         }).execute()
 
         if not response.data:
-            return jsonify({"error": "Failed to insert data into Supabase"}), 500
+            return jsonify({"error": "Failed to store in Supabase"}), 500
 
         return jsonify({
             "id": result_id,
@@ -79,9 +91,10 @@ def extract_payslip():
         })
 
     except ValueError:
-        return jsonify({"error": "user_id must be a number"}), 400
+        return jsonify({"error": "Invalid or missing user_id"}), 400
     except Exception as e:
         return jsonify({"error": "Something went wrong", "details": str(e)}), 500
+
 
 # ✅ GET /get-payslips/<user_id>
 @app.route('/get-payslips/<user_id>', methods=['GET'])
