@@ -38,13 +38,21 @@ def extract_employment_type(text):
 @app.route('/extract-payslip', methods=['POST'])
 def extract_payslip():
     extracted_text = None
-    user_id = None
+    userid = None
 
     try:
         # ✅ Case 1: multipart/form-data (from OutSystems with form fields)
-        if 'file' in request.files and 'user_id' in request.form:
+        if 'file' in request.files:
             file = request.files['file']
-            user_id = int(request.form['user_id'])
+
+            userid_str = request.form.get('userid') or request.headers.get('userid')
+            if not userid_str:
+                return jsonify({"error": "Missing userid in form or headers"}), 400
+
+            try:
+                userid = int(userid_str)
+            except ValueError:
+                return jsonify({"error": "userid must be a valid number"}), 400
 
             if not file.filename.lower().endswith('.pdf'):
                 return jsonify({"error": "Only PDF files are supported"}), 400
@@ -52,10 +60,11 @@ def extract_payslip():
             pdf_bytes = file.read()
             extracted_text = extract_text_from_pdf(io.BytesIO(pdf_bytes))
 
+
         # ✅ Case 2: application/json with base64
         elif request.is_json:
             data = request.get_json()
-            user_id = int(data.get("user_id"))
+            userid = int(data.get("userid"))
             base64_str = data.get("file")
 
             if not base64_str:
@@ -75,7 +84,7 @@ def extract_payslip():
         # ✅ Store in Supabase
         response = supabase.table("payslip_results").insert({
             "id": result_id,
-            "user_id": user_id,
+            "user_id": userid,
             "net_pay": net_pay,
             "employment_type": employment_type
         }).execute()
@@ -85,7 +94,7 @@ def extract_payslip():
 
         return jsonify({
             "id": result_id,
-            "user_id": user_id,
+            "user_id": userid,
             "NetPay": net_pay,
             "EmploymentType": employment_type
         })
