@@ -40,6 +40,10 @@ def extract_payslip():
     extracted_text = None
     userid = None
 
+    print("🔥 Headers:", dict(request.headers))
+    print("🔥 Form:", request.form)
+    print("🔥 Files:", request.files)
+
     try:
         # ✅ Case 1: multipart/form-data (from OutSystems with form fields)
         if 'file' in request.files:
